@@ -1,0 +1,142 @@
+
+-- Refield UI | Position & Sprint
+-- Pour ton propre jeu Roblox
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+local savedPosition = nil
+local sprintEnabled = false
+local normalSpeed = 16
+local sprintSpeed = 40
+
+local function getCharacter()
+    return player.Character
+end
+
+local function getRoot()
+    local character = getCharacter()
+    return character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHumanoid()
+    local character = getCharacter()
+    return character and character:FindFirstChildOfClass("Humanoid")
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "Refield"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local main = Instance.new("Frame")
+main.Size = UDim2.fromOffset(320, 300)
+main.Position = UDim2.new(0.5, -160, 0.5, -150)
+main.BackgroundColor3 = Color3.fromRGB(5, 14, 27)
+main.BorderSizePixel = 0
+main.Active = true
+main.Draggable = true
+main.Parent = gui
+
+Instance.new("UICorner", main).CornerRadius =
+    UDim.new(0, 12)
+
+local outline = Instance.new("UIStroke", main)
+outline.Color = Color3.fromRGB(0, 145, 255)
+outline.Thickness = 1.5
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 48)
+title.Position = UDim2.fromOffset(12, 0)
+title.BackgroundTransparency = 1
+title.Text = "R  REF IELD"
+title.TextColor3 = Color3.fromRGB(105, 190, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 22
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = main
+
+local function makeButton(text, y)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, -32, 0, 43)
+    button.Position = UDim2.fromOffset(16, y)
+    button.BackgroundColor3 = Color3.fromRGB(8, 50, 88)
+    button.TextColor3 = Color3.fromRGB(220, 240, 255)
+    button.Font = Enum.Font.GothamMedium
+    button.TextSize = 14
+    button.Text = text
+    button.AutoButtonColor = true
+    button.Parent = main
+
+    Instance.new("UICorner", button).CornerRadius =
+        UDim.new(0, 8)
+
+    return button
+end
+
+local setPoint = makeButton("📍  Sauvegarder ma position", 60)
+local returnPoint = makeButton("↩  Retour au point sauvegardé", 112)
+local sprintButton = makeButton("⚡  Sprint : OFF", 164)
+
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1, -32, 0, 48)
+status.Position = UDim2.fromOffset(16, 225)
+status.BackgroundTransparency = 1
+status.Text = "Bienvenue sur Refield"
+status.TextColor3 = Color3.fromRGB(100, 180, 230)
+status.Font = Enum.Font.Gotham
+status.TextSize = 12
+status.TextWrapped = true
+status.Parent = main
+
+setPoint.Activated:Connect(function()
+    local root = getRoot()
+
+    if root then
+        savedPosition = root.CFrame
+        status.Text = "Position sauvegardée !"
+    else
+        status.Text = "Personnage indisponible"
+    end
+end)
+
+returnPoint.Activated:Connect(function()
+    local root = getRoot()
+
+    if not savedPosition then
+        status.Text = "Sauvegarde d'abord un point !"
+        return
+    end
+
+    if root then
+        root.CFrame = savedPosition
+        status.Text = "Retour au point effectué !"
+    else
+        status.Text = "Personnage indisponible"
+    end
+end)
+
+local function applySpeed()
+    local humanoid = getHumanoid()
+    if humanoid then
+        humanoid.WalkSpeed = sprintEnabled
+            and sprintSpeed or normalSpeed
+    end
+end
+
+sprintButton.Activated:Connect(function()
+    sprintEnabled = not sprintEnabled
+    sprintButton.Text = sprintEnabled
+        and "⚡  Sprint : ON"
+        or "⚡  Sprint : OFF"
+
+    applySpeed()
+    status.Text = sprintEnabled
+        and "Sprint activé"
+        or "Vitesse normale activée"
+end)
+
+player.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    applySpeed()
+end)
