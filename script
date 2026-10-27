@@ -1,142 +1,443 @@
 
--- Refield UI | Position & Sprint
--- Pour ton propre jeu Roblox
+--[[
+    REF I E L D  2.0
+    Roblox Studio - LocalScript
+    Position, retour, vitesse configurable et interface déplaçable
+]]
 
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
-local savedPosition = nil
-local sprintEnabled = false
+local savedCFrame
+local speedEnabled = false
+local currentSpeed = 16
 local normalSpeed = 16
-local sprintSpeed = 40
+local connections = {}
 
-local function getCharacter()
-    return player.Character
+-- Nettoyage en cas de relancement
+local previous = playerGui:FindFirstChild("Refield")
+if previous then
+    previous:Destroy()
 end
 
-local function getRoot()
-    local character = getCharacter()
-    return character and character:FindFirstChild("HumanoidRootPart")
+local function characterParts()
+    local char = player.Character
+    if not char then return nil, nil end
+    return char:FindFirstChild("HumanoidRootPart"),
+        char:FindFirstChildOfClass("Humanoid")
 end
 
-local function getHumanoid()
-    local character = getCharacter()
-    return character and character:FindFirstChildOfClass("Humanoid")
-end
-
+-- Interface
 local gui = Instance.new("ScreenGui")
 gui.Name = "Refield"
 gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.DisplayOrder = 50
+gui.Parent = playerGui
+
+local function corner(object, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 10)
+    c.Parent = object
+    return c
+end
+
+local function stroke(object, color, thickness)
+    local s = Instance.new("UIStroke")
+    s.Color = color or Color3.fromRGB(0, 175, 255)
+    s.Thickness = thickness or 1
+    s.Transparency = 0.25
+    s.Parent = object
+end
+
+local function label(parent, text, size, pos, fontSize, color)
+    local l = Instance.new("TextLabel")
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.Size = size
+    l.Position = pos
+    l.Font = Enum.Font.GothamMedium
+    l.TextSize = fontSize or 13
+    l.TextColor3 = color or Color3.fromRGB(220, 235, 250)
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Parent = parent
+    return l
+end
+
+local function button(parent, text, size, pos)
+    local b = Instance.new("TextButton")
+    b.Size = size
+    b.Position = pos
+    b.BackgroundColor3 = Color3.fromRGB(13, 38, 60)
+    b.Text = text
+    b.TextColor3 = Color3.fromRGB(225, 242, 255)
+    b.TextSize = 13
+    b.Font = Enum.Font.GothamMedium
+    b.AutoButtonColor = true
+    b.Parent = parent
+    corner(b, 9)
+    return b
+end
 
 local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(320, 300)
-main.Position = UDim2.new(0.5, -160, 0.5, -150)
-main.BackgroundColor3 = Color3.fromRGB(5, 14, 27)
+main.Name = "Window"
+main.Size = UDim2.fromOffset(680, 440)
+main.Position = UDim2.new(0.5, -340, 0.5, -220)
+main.BackgroundColor3 = Color3.fromRGB(7, 13, 23)
 main.BorderSizePixel = 0
-main.Active = true
-main.Draggable = true
 main.Parent = gui
+corner(main, 15)
+stroke(main, Color3.fromRGB(0, 155, 255), 1.4)
 
-Instance.new("UICorner", main).CornerRadius =
-    UDim.new(0, 12)
+-- Barre supérieure
+local top = Instance.new("Frame")
+top.Size = UDim2.new(1, 0, 0, 55)
+top.BackgroundColor3 = Color3.fromRGB(10, 23, 39)
+top.BorderSizePixel = 0
+top.Parent = main
+corner(top, 15)
 
-local outline = Instance.new("UIStroke", main)
-outline.Color = Color3.fromRGB(0, 145, 255)
-outline.Thickness = 1.5
+local topFix = Instance.new("Frame")
+topFix.Size = UDim2.new(1, 0, 0, 15)
+topFix.Position = UDim2.new(0, 0, 1, -15)
+topFix.BackgroundColor3 = top.BackgroundColor3
+topFix.BorderSizePixel = 0
+topFix.Parent = top
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 0, 48)
-title.Position = UDim2.fromOffset(12, 0)
-title.BackgroundTransparency = 1
-title.Text = "R  REF IELD"
-title.TextColor3 = Color3.fromRGB(105, 190, 255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 22
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = main
+label(top, "R", UDim2.fromOffset(30, 36),
+    UDim2.fromOffset(19, 9), 27,
+    Color3.fromRGB(50, 190, 255))
 
-local function makeButton(text, y)
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -32, 0, 43)
-    button.Position = UDim2.fromOffset(16, y)
-    button.BackgroundColor3 = Color3.fromRGB(8, 50, 88)
-    button.TextColor3 = Color3.fromRGB(220, 240, 255)
-    button.Font = Enum.Font.GothamMedium
-    button.TextSize = 14
-    button.Text = text
-    button.AutoButtonColor = true
-    button.Parent = main
+label(top, "REFIELD", UDim2.fromOffset(155, 25),
+    UDim2.fromOffset(54, 8), 17)
 
-    Instance.new("UICorner", button).CornerRadius =
-        UDim.new(0, 8)
+label(top, "CONTROL CENTER  /  02",
+    UDim2.fromOffset(210, 20),
+    UDim2.fromOffset(55, 29), 9,
+    Color3.fromRGB(100, 145, 180))
 
-    return button
-end
+local close = button(top, "×", UDim2.fromOffset(34, 32),
+    UDim2.new(1, -47, 0, 11))
+close.TextSize = 22
+close.Activated:Connect(function()
+    gui:Destroy()
+end)
 
-local setPoint = makeButton("📍  Sauvegarder ma position", 60)
-local returnPoint = makeButton("↩  Retour au point sauvegardé", 112)
-local sprintButton = makeButton("⚡  Sprint : OFF", 164)
+-- Déplacement de la fenêtre
+local dragging = false
+local dragStart, startPosition
 
-local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1, -32, 0, 48)
-status.Position = UDim2.fromOffset(16, 225)
-status.BackgroundTransparency = 1
-status.Text = "Bienvenue sur Refield"
-status.TextColor3 = Color3.fromRGB(100, 180, 230)
-status.Font = Enum.Font.Gotham
-status.TextSize = 12
-status.TextWrapped = true
-status.Parent = main
-
-setPoint.Activated:Connect(function()
-    local root = getRoot()
-
-    if root then
-        savedPosition = root.CFrame
-        status.Text = "Position sauvegardée !"
-    else
-        status.Text = "Personnage indisponible"
+top.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPosition = main.Position
     end
 end)
 
-returnPoint.Activated:Connect(function()
-    local root = getRoot()
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch
+    ) then
+        local delta = input.Position - dragStart
+        main.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+    end
+end)
 
-    if not savedPosition then
-        status.Text = "Sauvegarde d'abord un point !"
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+-- Sidebar
+local sidebar = Instance.new("Frame")
+sidebar.Position = UDim2.fromOffset(12, 68)
+sidebar.Size = UDim2.fromOffset(166, 359)
+sidebar.BackgroundColor3 = Color3.fromRGB(10, 19, 32)
+sidebar.BorderSizePixel = 0
+sidebar.Parent = main
+corner(sidebar, 11)
+
+label(sidebar, "NAVIGATION", UDim2.new(1, -24, 0, 24),
+    UDim2.fromOffset(13, 10), 10,
+    Color3.fromRGB(90, 135, 170))
+
+local homeTab = button(sidebar, "⌂    Dashboard",
+    UDim2.new(1, -16, 0, 39), UDim2.fromOffset(8, 43))
+homeTab.BackgroundColor3 = Color3.fromRGB(0, 86, 133)
+
+local movementTab = button(sidebar, "↗    Movement",
+    UDim2.new(1, -16, 0, 39), UDim2.fromOffset(8, 88))
+
+local pointTab = button(sidebar, "◎    SetPoint",
+    UDim2.new(1, -16, 0, 39), UDim2.fromOffset(8, 133))
+
+label(sidebar, "REFIELD 2.0",
+    UDim2.new(1, -20, 0, 20),
+    UDim2.fromOffset(12, 315), 10,
+    Color3.fromRGB(75, 155, 210))
+
+-- Contenu
+local content = Instance.new("Frame")
+content.Position = UDim2.fromOffset(192, 68)
+content.Size = UDim2.new(1, -204, 1, -80)
+content.BackgroundTransparency = 1
+content.Parent = main
+
+local heading = label(content, "Dashboard",
+    UDim2.new(1, -10, 0, 33),
+    UDim2.fromOffset(3, 0), 22)
+
+label(content, "Manage your movement and saved location",
+    UDim2.new(1, -10, 0, 22),
+    UDim2.fromOffset(4, 32), 11,
+    Color3.fromRGB(115, 145, 175))
+
+local function panel(y, height)
+    local p = Instance.new("Frame")
+    p.Position = UDim2.fromOffset(2, y)
+    p.Size = UDim2.new(1, -4, 0, height)
+    p.BackgroundColor3 = Color3.fromRGB(12, 24, 39)
+    p.BorderSizePixel = 0
+    p.Parent = content
+    corner(p, 11)
+    stroke(p, Color3.fromRGB(30, 65, 95), 1)
+    return p
+end
+
+-- Carte SetPoint
+local pointPanel = panel(65, 126)
+label(pointPanel, "SETPOINT",
+    UDim2.new(1, -24, 0, 23),
+    UDim2.fromOffset(13, 9), 12,
+    Color3.fromRGB(80, 195, 255))
+
+local pointStatus = label(pointPanel, "Aucun point sauvegardé",
+    UDim2.new(1, -24, 0, 23),
+    UDim2.fromOffset(13, 33), 11,
+    Color3.fromRGB(160, 185, 205))
+
+local saveBtn = button(pointPanel, "◎  Save position",
+    UDim2.new(0.48, -16, 0, 37),
+    UDim2.new(0, 12, 0, 70))
+
+local returnBtn = button(pointPanel, "↩  Return",
+    UDim2.new(0.48, -16, 0, 37),
+    UDim2.new(0.52, 4, 0, 70))
+
+saveBtn.Activated:Connect(function()
+    local root = characterParts()
+    if not root then
+        pointStatus.Text = "Personnage indisponible"
         return
     end
-
-    if root then
-        root.CFrame = savedPosition
-        status.Text = "Retour au point effectué !"
-    else
-        status.Text = "Personnage indisponible"
-    end
+    savedCFrame = root.CFrame
+    pointStatus.Text = string.format(
+        "Point enregistré  %.0f / %.0f / %.0f",
+        root.Position.X, root.Position.Y, root.Position.Z
+    )
 end)
 
-local function applySpeed()
-    local humanoid = getHumanoid()
+returnBtn.Activated:Connect(function()
+    local root = characterParts()
+    if not savedCFrame then
+        pointStatus.Text = "Sauvegarde un point en premier"
+        return
+    end
+    if not root then
+        pointStatus.Text = "Personnage indisponible"
+        return
+    end
+    root.CFrame = savedCFrame
+    pointStatus.Text = "Retour demandé"
+end)
+
+-- Carte vitesse
+local speedPanel = panel(203, 157)
+
+label(speedPanel, "MOVEMENT CONTROL",
+    UDim2.new(1, -24, 0, 23),
+    UDim2.fromOffset(13, 8), 12,
+    Color3.fromRGB(80, 195, 255))
+
+label(speedPanel, "WalkSpeed",
+    UDim2.fromOffset(120, 22),
+    UDim2.fromOffset(13, 37), 12)
+
+local speedBox = Instance.new("TextBox")
+speedBox.Size = UDim2.fromOffset(65, 29)
+speedBox.Position = UDim2.new(1, -79, 0, 32)
+speedBox.BackgroundColor3 = Color3.fromRGB(5, 14, 25)
+speedBox.TextColor3 = Color3.fromRGB(100, 205, 255)
+speedBox.Text = "40"
+speedBox.PlaceholderText = "16-100"
+speedBox.Font = Enum.Font.GothamBold
+speedBox.TextSize = 14
+speedBox.ClearTextOnFocus = false
+speedBox.Parent = speedPanel
+corner(speedBox, 7)
+
+local MIN_SPEED, MAX_SPEED = 16, 100
+
+local track = Instance.new("Frame")
+track.Position = UDim2.fromOffset(14, 77)
+track.Size = UDim2.new(1, -28, 0, 8)
+track.BackgroundColor3 = Color3.fromRGB(28, 48, 66)
+track.BorderSizePixel = 0
+track.Parent = speedPanel
+corner(track, 5)
+
+local fill = Instance.new("Frame")
+fill.Size = UDim2.new((40 - MIN_SPEED) /
+    (MAX_SPEED - MIN_SPEED), 0, 1, 0)
+fill.BackgroundColor3 = Color3.fromRGB(0, 175, 255)
+fill.BorderSizePixel = 0
+fill.Parent = track
+corner(fill, 5)
+
+local knob = Instance.new("Frame")
+knob.AnchorPoint = Vector2.new(0.5, 0.5)
+knob.Size = UDim2.fromOffset(15, 15)
+knob.Position = UDim2.new(fill.Size.X.Scale, 0, 0.5, 0)
+knob.BackgroundColor3 = Color3.fromRGB(225, 247, 255)
+knob.BorderSizePixel = 0
+knob.Parent = track
+corner(knob, 10)
+
+local minLabel = label(speedPanel, "16",
+    UDim2.fromOffset(40, 18), UDim2.fromOffset(13, 89), 10,
+    Color3.fromRGB(120, 150, 175))
+local maxLabel = label(speedPanel, "100",
+    UDim2.fromOffset(40, 18), UDim2.new(1, -53, 0, 89), 10,
+    Color3.fromRGB(120, 150, 175))
+maxLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+local sprintBtn = button(speedPanel, "SPRINT  •  OFF",
+    UDim2.new(1, -26, 0, 32), UDim2.fromOffset(13, 116))
+
+local function setSpeed(value)
+    currentSpeed = math.clamp(
+        math.floor(tonumber(value) or 16), MIN_SPEED, MAX_SPEED
+    )
+    speedBox.Text = tostring(currentSpeed)
+    local alpha = (currentSpeed - MIN_SPEED) /
+        (MAX_SPEED - MIN_SPEED)
+    fill.Size = UDim2.new(alpha, 0, 1, 0)
+    knob.Position = UDim2.new(alpha, 0, 0.5, 0)
+
+    local _, humanoid = characterParts()
     if humanoid then
-        humanoid.WalkSpeed = sprintEnabled
-            and sprintSpeed or normalSpeed
+        humanoid.WalkSpeed = speedEnabled and currentSpeed or normalSpeed
     end
 end
 
-sprintButton.Activated:Connect(function()
-    sprintEnabled = not sprintEnabled
-    sprintButton.Text = sprintEnabled
-        and "⚡  Sprint : ON"
-        or "⚡  Sprint : OFF"
-
-    applySpeed()
-    status.Text = sprintEnabled
-        and "Sprint activé"
-        or "Vitesse normale activée"
+speedBox.FocusLost:Connect(function()
+    setSpeed(speedBox.Text)
 end)
 
-player.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    applySpeed()
+local sliderDragging = false
+
+local function updateSlider(input)
+    local x = math.clamp(
+        (input.Position.X - track.AbsolutePosition.X) /
+        track.AbsoluteSize.X, 0, 1
+    )
+    setSpeed(MIN_SPEED + x * (MAX_SPEED - MIN_SPEED))
+end
+
+track.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = true
+        updateSlider(input)
+    end
 end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if sliderDragging and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch
+    ) then
+        updateSlider(input)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = false
+    end
+end)
+
+sprintBtn.Activated:Connect(function()
+    speedEnabled = not speedEnabled
+    sprintBtn.Text = speedEnabled and "SPRINT  •  ON"
+        or "SPRINT  •  OFF"
+    sprintBtn.BackgroundColor3 = speedEnabled
+        and Color3.fromRGB(0, 105, 155)
+        or Color3.fromRGB(13, 38, 60)
+
+    local _, humanoid = characterParts()
+    if humanoid then
+        humanoid.WalkSpeed = speedEnabled and currentSpeed or normalSpeed
+    end
+end)
+
+-- Navigation visuelle
+local function showPage(page)
+    heading.Text = page
+    pointPanel.Visible = page ~= "Movement"
+    speedPanel.Visible = page ~= "SetPoint"
+
+    if page == "Movement" then
+        speedPanel.Position = UDim2.fromOffset(2, 65)
+        speedPanel.Size = UDim2.new(1, -4, 0, 157)
+    else
+        speedPanel.Position = UDim2.fromOffset(2, 203)
+        speedPanel.Size = UDim2.new(1, -4, 0, 157)
+    end
+
+    if page == "SetPoint" then
+        pointPanel.Position = UDim2.fromOffset(2, 65)
+    else
+        pointPanel.Position = UDim2.fromOffset(2, 65)
+    end
+end
+
+homeTab.Activated:Connect(function()
+    pointPanel.Visible = true
+    speedPanel.Visible = true
+    pointPanel.Position = UDim2.fromOffset(2, 65)
+    speedPanel.Position = UDim2.fromOffset(2, 203)
+    heading.Text = "Dashboard"
+end)
+
+movementTab.Activated:Connect(function()
+    showPage("Movement")
+end)
+
+pointTab.Activated:Connect(function()
+    showPage("SetPoint")
+end)
+
+-- Rétablir la vitesse au respawn
+player.CharacterAdded:Connect(function(char)
+    local humanoid = char:WaitForChild("Humanoid", 10)
+    if humanoid then
+        humanoid.WalkSpeed = speedEnabled and currentSpeed or normalSpeed
+    end
+end)
+
+setSpeed(40)
+print("Refield 2.0 chargé")
